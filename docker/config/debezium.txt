@@ -1,0 +1,82 @@
+//  insert
+curl -X POST http://localhost:8083/connectors \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "log-activity-account-service",
+    "config": {
+        "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+        "database.hostname": "host.docker.internal",
+        "database.port": "5444",
+        "database.user": "account-service",
+        "database.password": "hendra@123",
+        "database.dbname": "account-service",
+        "plugin.name": "pgoutput",
+        "topic.prefix": "cdc",
+        "table.include.list": "public.users,public.roles",
+        "transforms": "route",
+        "transforms.route.type": "org.apache.kafka.connect.transforms.RegexRouter",
+        "transforms.route.regex": ".*",
+        "transforms.route.replacement": "log-activity-account-service"
+    }
+  }'
+
+// delete
+curl -X DELETE http://localhost:8083/connectors/{nama_connector}
+
+// edit
+curl -X PUT http://localhost:8083/connectors/{nama_connector}/config \
+  -H "Content-Type: application/json" \
+  -d '{
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "database.hostname": "host.docker.internal",
+    "database.port": "5444",
+    "database.user": "account-service",
+    "database.password": "hendra@123",
+    "database.dbname": "account-service",
+    "plugin.name": "pgoutput",
+    "topic.prefix": "cdc",
+    "table.include.list": "public.users,public.roles",
+    "transforms": "route",
+    "transforms.route.type": "org.apache.kafka.connect.transforms.RegexRouter",
+    "transforms.route.regex": ".*",
+    "transforms.route.replacement": "log-activity-account-service"
+  }'
+
+// get 
+curl http://localhost:8083/connectors/{nama_connector}/status | jq
+
+
+
+-- additonal config with 1 table 1 topic
+{
+    "name": "pg-connector",
+    "config": {
+        "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+        "database.hostname": "host.docker.internal",
+        "database.port": "5444",
+        "database.user": "hendra",
+        "database.password": "hendra@123",
+        "database.dbname": "hendra",
+        "database.server.name": "hendra",
+        "plugin.name": "pgoutput",
+        "table.include.list": "public.users",
+        "topic.prefix": "cdc"
+    }
+}
+
+// config dengan 1 topic
+{
+    "connector.class": "io.debezium.connector.postgresql.PostgresConnector",
+    "database.hostname": "host.docker.internal",
+    "database.port": "5444",
+    "database.user": "hendra",
+    "database.password": "hendra@123",
+    "database.dbname": "hendra",
+    "plugin.name": "pgoutput",
+    "topic.prefix": "cdc",
+    "table.include.list": "public.users",
+    "transforms": "route",
+    "transforms.route.type": "org.apache.kafka.connect.transforms.RegexRouter",
+    "transforms.route.regex": ".*",
+    "transforms.route.replacement": "log-activity"
+}
