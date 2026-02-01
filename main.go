@@ -1,99 +1,81 @@
 package main
 
-import "reflect"
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log"
+	"os"
+	"os/signal"
+	"syscall"
+
+	"github.com/hensaX/debezium-logactivity/model"
+	"github.com/twmb/franz-go/pkg/kgo"
+)
 
 func main() {
+	ctx, cancel := context.WithCancel(context.Background())
 
+	client, _ := kgo.NewClient(
+		kgo.SeedBrokers("localhost:9092"),
+		kgo.ConsumeTopics("log-activity"),
+		kgo.ConsumerGroup("log-activity-service"),
+	)
+	log.Println("start consume")
+	go StartConsumer(ctx, client)
+
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+
+	<-sig
+	log.Println("shutdown signal")
+
+	cancel()       // ⬅ stop poll
+	client.Close() // ⬅ close kafka connection
 }
 
-type Changes map[string]Change
-type Change struct {
-	Old any `json:"old"`
-	New any `json:"new"`
-}
+func StartConsumer(ctx context.Context, client *kgo.Client) {
+	for {
+		select {
+		case <-ctx.Done():
+			log.Println("consumer shutdown signal received")
+			return
+		default:
+		}
 
-func DiffBeforeAfter(before, after map[string]interface{}) Changes {
-	changes := Changes{}
+		fetches := client.PollFetches(ctx)
 
-	for key, afterVal := range after {
-		beforeVal, exists := before[key]
-
-		if !exists {
-			// field baru
-			changes[key] = Change{
-				Old: nil,
-				New: afterVal,
+		// ⛔ WAJIB cek error
+		if errs := fetches.Errors(); len(errs) > 0 {
+			for _, err := range errs {
+				// Kalau context cancel → stop loop
+				if ctx.Err() != nil {
+					log.Println("poll stopped:", err)
+					return
+				}
+				log.Println("poll error:", err)
 			}
 			continue
 		}
 
-		// JSONB (map[string]interface{})
-		if isMap(beforeVal) && isMap(afterVal) {
-			subChanges := diffJSON(
-				beforeVal.(map[string]interface{}),
-				afterVal.(map[string]interface{}),
-				key,
-			)
-			for k, v := range subChanges {
-				changes[k] = v
-			}
-			continue
-		}
-
-		// normal field
-		if !reflect.DeepEqual(beforeVal, afterVal) {
-			changes[key] = Change{
-				Old: beforeVal,
-				New: afterVal,
-			}
-		}
+		fetches.EachRecord(func(r *kgo.Record) {
+			processLogActivity(r)
+		})
 	}
-
-	return changes
 }
 
-func diffJSON(
-	before, after map[string]interface{},
-	prefix string,
-) Changes {
-	changes := Changes{}
-
-	for key, afterVal := range after {
-		fullKey := prefix + "." + key
-		beforeVal, exists := before[key]
-
-		if !exists {
-			changes[fullKey] = Change{
-				Old: nil,
-				New: afterVal,
-			}
-			continue
-		}
-
-		if isMap(beforeVal) && isMap(afterVal) {
-			sub := diffJSON(
-				beforeVal.(map[string]interface{}),
-				afterVal.(map[string]interface{}),
-				fullKey,
-			)
-			for k, v := range sub {
-				changes[k] = v
-			}
-			continue
-		}
-
-		if !reflect.DeepEqual(beforeVal, afterVal) {
-			changes[fullKey] = Change{
-				Old: beforeVal,
-				New: afterVal,
-			}
-		}
+func processLogActivity(r *kgo.Record) {
+	msgData := &model.CDCData{}
+	err := json.Unmarshal(r.Value, msgData)
+	if err != nil {
+		fmt.Sprintf("error json unmarshal msg-data %w", err)
 	}
+	log.Printf(
+		"topic=%s partition=%d offset=%d key=%s value=%s",
+		r.Topic,
+		r.Partition,
+		r.Offset,
+	)
+	log.Printf("\n=============start\n[before] : %v \n[after] : %v\nend=============", msgData.Payload.Before, msgData.Payload.After)
 
-	return changes
-}
-
-func isMap(v interface{}) bool {
-	_, ok := v.(map[string]interface{})
-	return ok
 }

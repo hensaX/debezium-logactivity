@@ -6,14 +6,14 @@ services:
     ports:
       - "5444:5432"
     environment:
-      POSTGRES_DB: account-service
-      POSTGRES_USER: account-service
+      POSTGRES_DB: hendradb
+      POSTGRES_USER: hendra
       POSTGRES_PASSWORD: hendra@123
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./config/postgres.conf:/config/postgres.conf
       - ./config/pg_hba.conf:/config/pg_hba.conf
-      - ./config/init.sql:/docker-entrypoint-initdb.d/init.sql
+      # - ./config/init.sql:/docker-entrypoint-initdb.d/init.sql
     command:
       - "postgres"
       - "-c"
@@ -21,7 +21,7 @@ services:
       - "-c"
       - "hba_file=/config/pg_hba.conf"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U appuser"]
+      test: ["CMD-SHELL", "pg_isready -U hendra -d hendradb"]
       interval: 10s
       retries: 5
 
